@@ -1,5 +1,9 @@
 # GNNInterpreter Reproducibility Study
 
+#### Ana-Maria Vasilcoiu, Batu Helvacioğlu, Thies Kersten, Thijs Stessens
+
+---
+
 This repo contains the official implementation for the reproducibility study conducted based on the paper entitled "[GNNInterpreter: A Probabilistic Generative Model-Level Explanation for Graph Neural Networks](https://openreview.net/forum?id=rqq6Dh8t4d)".
 
 ## Structure of the repository

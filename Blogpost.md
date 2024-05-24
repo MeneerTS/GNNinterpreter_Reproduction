@@ -33,7 +33,7 @@ with two distinct but important parts:
 Mathematically, the learning objective can be formulated as follows:
 
 $$\begin{align} 
-\max _{G} L(G)=\max _{A, Z, X} L(A, Z, X)=\max _{A, Z, X} \phi_{c}(A, Z, X)+\mu \cdot \operatorname{sim}_{\cos }\left(\psi(A, Z, X), \bar{\psi}_{c}\right) & \qquad \qquad \text{(1)} 
+\max _ {G} L(G)=\max _ {A, Z, X} L(A, Z, X)=\max _ {A, Z, X} \phi_{c}(A, Z, X)+\mu \cdot \text{sim}_ {\cos }\left(\psi(A, Z, X), \bar{\psi}_{c}\right) & \qquad \qquad
 \end{align}$$
 
 #### Graph distribution
@@ -44,21 +44,39 @@ To learn a probabilistic graph distribution, two assumptions are made: (1) the e
 
 To address the discrete nature of graphs and achieve node and edge feature
 flexibility, GNNInterpreter uses continuous relaxation of the discrete variables to continuous variables which are then specified using the Concrete distribution. The random variables are modeled to be continuous as follows:
+
 $$\begin{align} 
-\left\{\begin{array}{ll}\tilde{x}_{i} \sim \operatorname{Concrete}\left(\xi_{i j}, \tau_{x}\right) & \text { for } \tilde{x}_{i} \in \tilde{\mathbf{X}} \text { and } \xi_{i} \in \boldsymbol{\Xi} \\ \tilde{z}_{i j} \sim \operatorname{Concrete}\left(\eta_{i j}, \tau_{z}\right) & \text { for } \tilde{z}_{i j} \in \tilde{\mathbf{Z}} \text { and } \eta_{i j} \in \mathbf{H} \\ \tilde{a}_{i j} \sim \operatorname{BinaryConcrete}\left(\omega_{i j}, \tau_{a}\right) & \text { for } \tilde{a}_{i j} \in \tilde{\mathbf{A}} \text { and } \omega_{i j} \in \boldsymbol{\Omega}\end{array}\right. & \qquad \qquad \text{(2)} 
+\tilde{x}_ {i} \sim \text{Concrete}\left(\xi_{i j}, \tau_{x}\right) \quad for \quad \tilde{x}_ {i} \in \tilde{\mathbf{X}} \quad and \quad \xi_{i} \in \boldsymbol{\Xi} & \qquad \qquad
+\end{align}$$
+
+$$\begin{align} 
+\tilde{z}_ {i j} \sim \text{Concrete}\left(\eta_{i j}, \tau_{z}\right) \quad for \quad \tilde{z}_ {i j} \in \tilde{\mathbf{Z}} \quad and \quad \eta_{i j} \in \mathbf{H} & \qquad \qquad
+\end{align}$$
+
+$$\begin{align} 
+\tilde{a}_ {i j} \sim \text{BinaryConcrete}\left(\omega_{i j}, \tau_{a}\right) \quad \quad for \quad \tilde{a}_ {i j} \in \tilde{\mathbf{A}} \quad and \quad \omega_{i j} \in \boldsymbol{\Omega}& \qquad \qquad 
 \end{align}$$
 
 The reparameterization trick is also applied to make this distribution differentiable, facilitating gradient-based optimization.
 
 An independent random variable ϵ ∼ Uniform(0, 1) to adjust the sampling function as follows:
+
 $$\begin{align} 
-\left\{\begin{array}{l}\tilde{x}_{i} \sim \operatorname{Softmax}\left(\left(\xi_{i}-\log (-\log \epsilon)\right) / \tau_{z}\right) \\ \tilde{z}_{i j} \sim \operatorname{Softmax}\left(\left(\eta_{i j}-\log (-\log \epsilon)\right) / \tau_{z}\right) \\ \tilde{a}_{i j} \sim \operatorname{sigmoid}\left(\left(\omega_{i j}-\log \epsilon-\log (1-\epsilon)\right) / \tau_{a}\right)\end{array}\right. & \qquad \qquad \text{(3)} 
+\tilde{x}_ {i} \sim \text{Softmax}\left(\left(\xi_{i}-\log (-\log \epsilon)\right) / \tau_{z}\right) & \qquad \qquad 
+\end{align}$$
+
+$$\begin{align} 
+\tilde{z}_ {i j} \sim \text{Softmax}\left(\left(\eta_{i j}-\log (-\log \epsilon)\right) / \tau_{z}\right)  & \qquad \qquad 
+\end{align}$$
+
+$$\begin{align} 
+\tilde{a}_ {i j} \sim \text{sigmoid}\left(\left(\omega_{i j}-\log \epsilon-\log (1-\epsilon)\right) / \tau_{a}\right) & \qquad \qquad 
 \end{align}$$
 
 With these two modifications it’s possible to draw samples, that correspond to the distribution, without losing differentiability. The learning objective is then approximated using the Monte Carlo method with K samples:
 
 $$\begin{align} 
-\max _{\Theta, Q, P} \mathbb{E}_{G \sim P(G)}[L(A, Z, X)] \approx \max _{\Omega, H, \Xi} \mathbb{E}_{\epsilon \sim U(0,1)}[L(\widetilde{A}, \widetilde{Z}, \widetilde{X})] \approx \max _{\Omega, H, \Xi} \frac{1}{K} \sum_{k=1}^{K} L(\widetilde{A}, \widetilde{Z}, \widetilde{X}) & \qquad \qquad \text{(4)} 
+\max _ {\Theta, Q, P} \mathbb{E}_ {G \sim P(G)}[L(A, Z, X)] \approx \max _ {\Omega, H, \Xi} \mathbb{E}_ {\epsilon \sim U(0,1)}[L(\widetilde{A}, \widetilde{Z}, \widetilde{X})] \approx \max _ {\Omega, H, \Xi} \frac{1}{K} \sum_{k=1}^{K} L(\widetilde{A}, \widetilde{Z}, \widetilde{X}) & \qquad \qquad 
 \end{align}$$
 
 #### Regularization

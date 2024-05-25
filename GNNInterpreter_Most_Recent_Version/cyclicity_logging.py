@@ -1,4 +1,4 @@
-from gnninterpreter import *
+from .gnninterpreter import *
 import torch
 import random
 import numpy as np
@@ -20,10 +20,12 @@ def main():
     if not os.path.exists(logs_directory):
         os.makedirs(logs_directory)
 
-    cyclicitylog(seeds)
+    cyclicitylog(seeds,explain_all_classes=True)
 
-def cyclicitylog(seeds):
-    with open("logs/train_times_cyclicity_new.txt", "w") as log_file_train, open("logs/class_probs_cyclicity_new.txt", "w") as log_file_probs:
+def cyclicitylog(seeds, train_times_log_path="logs/train_times_cyclicity_new.txt", class_probs_log_path="logs/class_probs_cyclicity_new.txt",
+             pretrained_model_checkpoint_path='ckpts/cyclicity.pt',
+             explain_all_classes=False,explain_red_cyclic=False,explain_green_cyclic=False,explain_acyclic=False):
+    with open(train_times_log_path, "w") as log_file_train, open( class_probs_log_path, "w") as log_file_probs:
         # Write header
         log_file_train.write("Seed\tClass\tTrain Time\n")
         log_file_probs.write("Seed\tClass\tMean\tStd\n")
@@ -40,7 +42,7 @@ def cyclicitylog(seeds):
                                 edge_features=len(dataset.EDGE_CLS),
                                 num_classes=len(dataset.GRAPH_CLS),
                                 hidden_channels=32)
-            model.load_state_dict(torch.load('ckpts/cyclicity.pt'))
+            model.load_state_dict(torch.load(pretrained_model_checkpoint_path))
 
             # Mean embeddings
             mean_embeds = dataset.mean_embeddings(model)
@@ -48,19 +50,29 @@ def cyclicitylog(seeds):
             # Initialize trainer
             trainer = classTrainer(dataset, model, mean_embeds, seed)
 
+            if explain_all_classes:
+                explain_red_cyclic = True
+                explain_green_cyclic = True
+                explain_acyclic = True
+            elif not (explain_red_cyclic or explain_green_cyclic or explain_acyclic):
+                print("No class selected for training, please specify a class or train_all_classes as True.")
+
             # Red cyclic
-            trainer[0].train(2000, log_file=log_file_train)
-            trainer[0].evaluateAndLog(log_file_probs=log_file_probs)
+            if explain_all_classes:
+                trainer[0].train(2000, log_file=log_file_train)
+                trainer[0].evaluateAndLog(log_file_probs=log_file_probs)
 
             # Green cyclic
-            seed_all(seed)
-            trainer[1].train(2000, log_file=log_file_train)
-            trainer[1].evaluateAndLog(log_file_probs=log_file_probs)
+            if explain_green_cyclic:
+                seed_all(seed)
+                trainer[1].train(2000, log_file=log_file_train)
+                trainer[1].evaluateAndLog(log_file_probs=log_file_probs)
 
             # Acylic
-            seed_all(seed)
-            trainer[2].train(2000, log_file=log_file_train)
-            trainer[2].evaluateAndLog(log_file_probs=log_file_probs)
+            if explain_acyclic:
+                seed_all(seed)
+                trainer[2].train(2000, log_file=log_file_train)
+                trainer[2].evaluateAndLog(log_file_probs=log_file_probs)
 
     return
         

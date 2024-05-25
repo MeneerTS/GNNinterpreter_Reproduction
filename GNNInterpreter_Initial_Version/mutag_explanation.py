@@ -1,4 +1,4 @@
-from gnninterpreter import *
+from .gnninterpreter import *
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -28,10 +28,12 @@ def main():
     if not os.path.exists(logs_directory):
         os.makedirs(logs_directory)
 
-    mutaglog(seeds)
+    mutaglog(seeds, explain_all_classes=True)
 
-def mutaglog(seeds):
-    with open("logs/train_times_mutag.txt", "w") as log_file_train, open("logs/class_probs_mutag.txt", "w") as log_file_probs:
+def mutaglog(seeds, train_times_log_path="logs/train_times_mutag.txt", class_probs_log_path="logs/class_probs_mutag.txt",
+             pretrained_model_checkpoint_path='models_checkpoints/mutag_gnn_64x3.pt',
+             explain_all_classes=False,explain_non_mutagenic=False,explain_mutagenic=False):
+    with open(train_times_log_path, "w") as log_file_train, open(class_probs_log_path, "w") as log_file_probs:
         # Write header
         log_file_train.write("Seed\tClass\tTrain Time\n")
         log_file_probs.write("Seed\tClass\tMean\tStd\n")
@@ -48,7 +50,7 @@ def mutaglog(seeds):
                         node_features=len(mutag.NODE_CLS),
                         num_classes=len(mutag.GRAPH_CLS))
 
-            model.load_state_dict(torch.load('models_checkpoints/mutag_gnn_64x3.pt'))
+            model.load_state_dict(torch.load(pretrained_model_checkpoint_path))
 
             # Generate avergae embedding
             embeds = [[] for _ in range(len(mutag.GRAPH_CLS))]
@@ -59,12 +61,20 @@ def mutaglog(seeds):
 
             trainer = {}
             sampler = {}
+            if explain_all_classes:
+                explain_non_mutagenic = True
+                explain_mutagenic = True
+            elif not (explain_non_mutagenic or explain_mutagenic):
+                print("No class selected for training, please specify a class or train_all_classes as True.")
 
             # Class 0 (non mutagenic)
-            nonmutagenic(mutag, mean_embeds, model, trainer, sampler, seed, log_file_train, log_file_probs)
-            seed_all(seed)
-            # Class 1 (mutagenic)
-            mutagenic(mutag, mean_embeds, model, trainer, sampler, seed, log_file_train, log_file_probs)
+            if explain_all_classes:
+                nonmutagenic(mutag, mean_embeds, model, trainer, sampler, seed, log_file_train, log_file_probs)
+
+            if explain_non_mutagenic:
+                # Class 1 (mutagenic)
+                seed_all(seed)
+                mutagenic(mutag, mean_embeds, model, trainer, sampler, seed, log_file_train, log_file_probs)
 
     return
 

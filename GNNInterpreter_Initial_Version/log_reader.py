@@ -1,23 +1,7 @@
-from gnninterpreter import *
-import random
-from collections import defaultdict, namedtuple
-from itertools import combinations_with_replacement
-
 import numpy as np
 import pandas as pd
 import re
-# import seaborn as sns
-import matplotlib.pyplot as plt
-# import plotly.express as px
 
-from tqdm.auto import tqdm, trange
-
-import torch
-from torch import nn
-import torch_geometric as pyg
-from torchmetrics import F1Score
-import time
-import os
 
 def calculate_average_train_time(file_path):
     total_train_time = 0
@@ -90,7 +74,7 @@ def calculate_average_acc(log_path):
 
         # Create df
         df = pd.DataFrame(split_lines, columns=['Seed', 'Class', 'Mean', 'Std'])
-
+        print(df)
         # Remove brackets
         df['Mean'] = df['Mean'].str.strip('[]')
         df['Std'] = df['Std'].str.strip('[]')

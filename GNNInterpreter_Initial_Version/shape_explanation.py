@@ -1,4 +1,4 @@
-from gnninterpreter import *
+from .gnninterpreter import *
 # %%
 import numpy as np
 import matplotlib.pyplot as plt
@@ -28,10 +28,12 @@ def main():
     if not os.path.exists(logs_directory):
         os.makedirs(logs_directory)
 
-    shapelog(seeds)
+    shapelog(seeds, explain_all_classes=True)
 
-def shapelog(seeds):
-    with open("logs/train_times_shape.txt", "w") as log_file_train, open("logs/class_probs_shape.txt", "w") as log_file_probs:
+def shapelog(seeds, train_times_log_path="logs/train_times_shape.txt", class_probs_log_path="logs/class_probs_shape.txt",
+             pretrained_model_checkpoint_path='models_checkpoints/shape_simple_gcn.pt',
+             explain_all_classes=False,explain_lollipop=False,explain_wheel=False,explain_grid=False,explain_star=False):
+    with open(train_times_log_path, "w") as log_file_train, open(class_probs_log_path, "w") as log_file_probs:
         # Write header
         log_file_train.write("Seed\tClass\tTrain Time\n")
         log_file_probs.write("Seed\tClass\tMean\tStd\n")
@@ -49,7 +51,7 @@ def shapelog(seeds):
                                         node_features=len(shape.NODE_CLS),
                                         num_classes=len(shape.GRAPH_CLS))
 
-            model.load_state_dict(torch.load('models_checkpoints/shape_simple_gcn.pt'))
+            model.load_state_dict(torch.load(pretrained_model_checkpoint_path))
 
             # Generate average embedding
             embeds = [[] for _ in range(len(shape.GRAPH_CLS))]
@@ -61,15 +63,28 @@ def shapelog(seeds):
             trainer = {}
             sampler = {}
 
-            # Class 1
+            if explain_all_classes:
+                explain_lollipop = True
+                explain_wheel = True
+                explain_grid = True
+                explain_star = True
+            elif not (explain_lollipop or explain_wheel or explain_grid or explain_star):
+                print("No class selected for training, please specify a class or train_all_classes as True.")
 
-            class1(shape, mean_embeds, model, trainer, sampler, seed, log_file_train, log_file_probs)
-            seed_all(seed)
-            class2(shape, mean_embeds, model, trainer, sampler, seed, log_file_train, log_file_probs)
-            seed_all(seed)
-            class3(shape, mean_embeds, model, trainer, sampler, seed, log_file_train, log_file_probs)
-            seed_all(seed)
-            class4(shape, mean_embeds, model, trainer, sampler, seed, log_file_train, log_file_probs)
+            # Lollipop
+            if explain_lollipop:
+                class1(shape, mean_embeds, model, trainer, sampler, seed, log_file_train, log_file_probs)
+            # Wheel
+            if explain_wheel:
+                seed_all(seed)
+                class2(shape, mean_embeds, model, trainer, sampler, seed, log_file_train, log_file_probs)
+            # Grid
+            if explain_grid:
+                seed_all(seed)
+                class3(shape, mean_embeds, model, trainer, sampler, seed, log_file_train, log_file_probs)
+            if explain_star:
+                seed_all(seed)
+                class4(shape, mean_embeds, model, trainer, sampler, seed, log_file_train, log_file_probs)
         return
 
 

@@ -23,16 +23,16 @@ def main():
     xgnnlog(seeds)
 
     # MUTAG experiments
-    # mutaglog(seeds)
+    mutaglog(seeds, explain_all_classes=True)
 
     # Motif experiments
-    # motiflog(seeds)
+    motiflog(seeds,explain_all_classes=True)
 
     # Shape experiments
-    # shapelog(seeds)
+    shapelog(seeds,explain_all_classes=True)
 
     # Cyclicity experiments
-    # cyclicitylog(seeds)
+    cyclicitylog(seeds,explain_all_classes=True)
 
 
 if __name__ == '__main__':

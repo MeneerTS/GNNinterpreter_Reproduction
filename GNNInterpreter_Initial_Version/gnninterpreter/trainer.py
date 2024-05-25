@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import torch
 from tqdm.auto import tqdm
+from tqdm.autonotebook import trange
 import matplotlib.pyplot as plt
 import networkx as nx
 import copy
@@ -18,24 +19,11 @@ import time
 
 
 class Trainer:
-    def __init__(self,
-                 sampler,
-                 discriminator,
-                 criterion,
-                 scheduler,
-                 optimizer,
-                 dataset,
-                 seed=None, #Dont have to set these if you don't use our logging
-                 classes=None,
-                 budget_penalty=None,
-                 target_probs: dict[tuple[float, float]] = None,
-                 k_samples=32):
+    def __init__(self, sampler, discriminator, criterion, scheduler, optimizer, dataset, k_samples, seed, classes):
         self.k = k_samples
-        self.target_probs = target_probs
         self.sampler = sampler
         self.discriminator = discriminator
         self.criterion = criterion
-        self.budget_penalty = budget_penalty
         self.scheduler = scheduler
         self.optimizer = optimizer if isinstance(optimizer, list) else [optimizer]
         self.dataset = dataset
@@ -67,16 +55,21 @@ class Trainer:
             self.sampler.init()
             self.train(iterations)
 
-    def train(self, iterations, log_file=None):
+    def train(self, iterations, dynamic_penalty=None, penalty_cond=None, break_cond=None, log_file=None):
         # Record training time
         start_time = time.time()
-        
+
         self.bkup_state = copy.deepcopy(self.sampler.state_dict())
         self.bkup_criterion = copy.deepcopy(self.criterion)
         self.bkup_iteration = self.iteration
         self.discriminator.eval()
         self.sampler.train()
-        budget_penalty_weight = 1
+        min_penalty = dynamic_penalty.weight if dynamic_penalty else 0
+
+        steps = []
+        graph_sizes = []
+        class_probs = []
+
         for _ in (bar := tqdm(range(int(iterations)), initial=self.iteration, total=self.iteration+iterations)):
             for opt in self.optimizer:
                 opt.zero_grad()
@@ -85,19 +78,21 @@ class Trainer:
             # TODO: potential bug
             cont_out = self.discriminator(cont_data, edge_weight=cont_data.edge_weight)
             disc_out = self.discriminator(disc_data, edge_weight=disc_data.edge_weight)
-            if self.target_probs and all([
-                min_p <= disc_out["probs"][0, classes].item() <= max_p
-                for classes, (min_p, max_p) in self.target_probs.items()
-            ]):
-                if self.budget_penalty and self.sampler.expected_m <= self.budget_penalty.budget:
-                    break
-                budget_penalty_weight *= 1.1
-            else:
-                budget_penalty_weight *= 0.95
+            if penalty_cond and penalty_cond(disc_out, self):
+                dynamic_penalty.weight += 1
+            elif dynamic_penalty.weight >= min_penalty + 0.1:
+                dynamic_penalty.weight -= 0.1
+            if break_cond and break_cond(disc_out, self):
+                size = self.sampler.expected_m
+                scores = disc_out["logits"].mean(axis=0).tolist()
+                softmax_scores = torch.nn.functional.softmax(torch.tensor(scores))
 
-            loss = self.criterion(cont_out | self.sampler.to_dict())
-            if self.budget_penalty:
-                loss += self.budget_penalty(self.sampler.theta) * budget_penalty_weight
+                steps.append(self.iteration)
+                class_probs.append(softmax_scores[self.classes])
+                graph_sizes.append(size)
+                self.plot_size_vs_score(class_probs, graph_sizes, steps)
+                break
+            loss = self.criterion(cont_out).mean()
             loss.backward()  # Back-propagate gradients
 
             # print(self.sampler.omega.grad)
@@ -111,11 +106,18 @@ class Trainer:
             size = self.sampler.expected_m
             scores = disc_out["logits"].mean(axis=0).tolist()
             score_dict = {v: scores[k] for k, v in self.dataset.GRAPH_CLS.items()}
-            penalty_weight = {'bpw': budget_penalty_weight} if self.budget_penalty else {}
+            penalty_weight = {'penalty': dynamic_penalty.weight} if dynamic_penalty else {}
             bar.set_postfix({'size': size} | penalty_weight | score_dict)
             # print(f"{iteration=}, loss={loss.item():.2f}, {size=}, scores={score_dict}")
+
+            softmax_scores = torch.nn.functional.softmax(torch.tensor(scores))
+            steps.append(self.iteration)
+            class_probs.append(softmax_scores[self.classes])
+            graph_sizes.append(size)
+
             self.iteration += 1
         else:
+            self.plot_size_vs_score(class_probs, graph_sizes, steps)
             if log_file:
                 # Log training times
                 end_time = time.time()
@@ -124,12 +126,32 @@ class Trainer:
             return False
         
         if log_file:
-                # Log training times
-                end_time = time.time()
-                elapsed_time = end_time - start_time
-                log_file.write(f"{self.seed}\t{self.classes}\t{elapsed_time}\n")
+            # Log training times
+            end_time = time.time()
+            elapsed_time = end_time - start_time
+            log_file.write(f"{self.seed}\t{self.classes}\t{elapsed_time}\n")
+        self.plot_size_vs_score(class_probs, graph_sizes, steps)
         return True
+    def plot_size_vs_score(self, scores, sizes, steps):
 
+        fig, ax1 = plt.subplots()
+        ax1.plot(steps,sizes,color="b", label="# Nodes", alpha=1.0)
+        ax1.set_xlabel("Iterations")
+        ax1.set_ylabel("Number of nodes in explanation graph",color="b")
+
+        ax2 = ax1.twinx()
+
+        ax2.plot(steps,scores,color="r", label="Probability", alpha=0.5)
+        ax2.set_ylabel("Correct class probabilities", color="r")
+
+        ax2.set_ylim(0.0, 1.1)
+
+        lines1, labels1 = ax1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        plt.figlegend(lines1 + lines2, labels1 + labels2, loc="upper right")
+        plt.title("Graph size, class probabilities vs iterations")
+
+        plt.savefig(f"training_plots/{self.dataset.__class__.__name__}_class_{self.classes}_seed_{self.seed}.png")
     def undo(self):
         self.sampler.load_state_dict(self.bkup_state)
         self.criterion = copy.deepcopy(self.bkup_criterion)
@@ -139,6 +161,49 @@ class Trainer:
     def predict(self, G):
         batch = pyg.data.Batch.from_data_list([self.dataset.convert(G, generate_label=True)])
         return self.discriminator(batch)
+    
+    @torch.no_grad()
+    def evaluateAndLog(self, *args, ax=None, log_file_probs=None, **kwargs):
+        # Get class probabilities
+
+        sample_fn = lambda: self.evaluate(bernoulli=True)
+
+        p = []
+        try:
+            for _ in range(1000):
+                p.append(self.predict(sample_fn())["probs"][0].numpy().astype(float))
+        except:
+            empty_str = "Empty"
+            log_file_probs.write(f"{self.seed}\t{self.classes}\t{empty_str}\t{empty_str}\n")
+            return False
+        stats = dict(label=list(self.dataset.GRAPH_CLS.values()),
+                    mean=np.mean(p, axis=0),
+                    std=np.std(p, axis=0))
+        
+        self.sampler.eval()
+        try:
+            G = self.sampler.sample(*args, **kwargs)
+        except:
+            return False
+        G = sorted([G.subgraph(c) for c in nx.connected_components(G)], key=lambda g: g.number_of_nodes())[-1]
+    
+        self.dataset.draw(G, ax=ax)
+
+        # Save explanation graph plot to folder
+        folder_path = f"{self.dataset.__class__.__name__}plots"
+        file_name = f"seed{self.seed}_class{self.classes}.png"
+
+        full_path = os.path.join(folder_path, file_name)
+        if not os.path.exists(folder_path):
+            os.makedirs(folder_path)
+        plt.savefig(full_path)
+        plt.clf()
+        plt.close()
+
+
+        # Log class probabilities
+        log_file_probs.write(f"{self.seed}\t{self.classes}\t{stats['mean']}\t{stats['std']}\n")
+        return G
 
     @torch.no_grad()
     def quantatitive(self, sample_size=1000, sample_fn=None):
@@ -166,55 +231,6 @@ class Trainer:
             self.show(G)
             plt.show()
         return G
-    
-    @torch.no_grad()
-    def evaluateAndLog(self, *args, ax=None, log_file_probs=None, **kwargs):
-        # Get class probabilities
-        sample_fn = lambda: self.evaluate(bernoulli=True)
-        p = []
-        empty_str = "Empty"
-        try:
-            for _ in range(1000):
-                p.append(self.predict(sample_fn())["probs"][0].numpy().astype(float))
-        except:
-            log_file_probs.write(f"{self.seed}\t{self.classes}\t{empty_str}\t{empty_str}")
-        stats = dict(label=list(self.dataset.GRAPH_CLS.values()),
-                    mean=np.mean(p, axis=0),
-                    std=np.std(p, axis=0))
-
-        self.sampler.eval()
-        try:
-            G = self.sampler.sample(*args, **kwargs)
-        except:
-            log_file_probs.write(f"{self.seed}\t{self.classes}\t{stats['mean']}\t{stats['std']}\n")
-        G = sorted([G.subgraph(c) for c in nx.connected_components(G)], key=lambda g: g.number_of_nodes())[-1]
-
-        self.dataset.draw(G, ax=ax)
-
-        # Save explanation graph plot to folder
-        folder_path = f"{self.dataset.__class__.__name__}plots"
-        file_name = f"seed{self.seed}_class{self.classes}.png"
-
-        full_path = os.path.join(folder_path, file_name)
-        if not os.path.exists(folder_path):
-            os.makedirs(folder_path)
-        plt.savefig(full_path)
-        plt.clf()
-
-        # Log class probabilities
-        log_file_probs.write(f"{self.seed}\t{self.classes}\t{stats['mean']}\t{stats['std']}\n")
-        return G
-
-    def show(self, G, ax=None):
-        n = G.number_of_nodes()
-        m = G.number_of_edges()
-        pred = self.predict(G)
-        logits = pred["logits"].mean(dim=0).tolist()
-        probs = pred["probs"].mean(dim=0).tolist()
-        print(f"{n=} {m=}")
-        print(f"{logits=}")
-        print(f"{probs=}")
-        self.dataset.draw(G, ax=ax)
 
     def show(self, G, ax=None):
         n = G.number_of_nodes()

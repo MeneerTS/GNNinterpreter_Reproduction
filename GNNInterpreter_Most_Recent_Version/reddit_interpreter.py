@@ -1,4 +1,4 @@
-from gnninterpreter import *
+from .gnninterpreter import *
 import torch
 from torch import nn
 import random

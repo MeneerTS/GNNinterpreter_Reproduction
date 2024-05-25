@@ -1,4 +1,4 @@
-from gnninterpreter import *
+from .gnninterpreter import *
 import random
 from collections import defaultdict, namedtuple
 from itertools import combinations_with_replacement
@@ -34,10 +34,12 @@ def main():
     if not os.path.exists(logs_directory):
         os.makedirs(logs_directory)
 
-    motiflog(seeds)
+    motiflog(seeds, explain_all_classes=True)
 
-def motiflog(seeds):
-    with open("logs/train_times_motif.txt", "w") as log_file_train, open("logs/class_probs_motif.txt", "w") as log_file_probs:
+def motiflog(seeds, train_times_log_path="logs/train_times_motif.txt", class_probs_log_path="logs/class_probs_motif.txt",
+             pretrained_model_checkpoint_path='models_checkpoints/motif_gnn_64x3.pt',
+             explain_all_classes=False,explain_house=False,explain_house_x=False,explain_comp_4=False,explain_comp_5=False):
+    with open(train_times_log_path, "w") as log_file_train, open(class_probs_log_path, "w") as log_file_probs:
         # Write header
         log_file_train.write("Seed\tClass\tTrain Time\n")
         log_file_probs.write("Seed\tClass\tMean\tStd\n")
@@ -54,7 +56,7 @@ def motiflog(seeds):
                       node_features=len(motif.NODE_CLS),
                       num_classes=len(motif.GRAPH_CLS),
                       num_layers=3)
-            model.load_state_dict(torch.load('models_checkpoints/motif_gnn_64x3.pt'))
+            model.load_state_dict(torch.load(pretrained_model_checkpoint_path))
 
             # Generate average embedding
             embeds = [[] for _ in range(len(motif.GRAPH_CLS))]
@@ -66,14 +68,30 @@ def motiflog(seeds):
             trainer = {}
             sampler = {}
 
+            if explain_all_classes:
+                explain_house = True
+                explain_house_x = True
+                explain_comp_4 = True
+                explain_comp_5 = True
+            elif not (explain_house or explain_house_x or explain_comp_4 or explain_comp_5):
+                print("No class selected for training, please specify a class or train_all_classes as True.")
+
+
             # Class 1
-            house(motif, mean_embeds, model, trainer, sampler, seed, log_file_train, log_file_probs)
-            seed_all(seed)
-            house_x(motif, mean_embeds, model, trainer, sampler, seed, log_file_train, log_file_probs)
-            seed_all(seed)
-            comp_4(motif, mean_embeds, model, trainer, sampler, seed, log_file_train, log_file_probs)
-            seed_all(seed)
-            comp_5(motif, mean_embeds, model, trainer, sampler, seed, log_file_train, log_file_probs)
+            if explain_house:
+                house(motif, mean_embeds, model, trainer, sampler, seed, log_file_train, log_file_probs)
+
+            if explain_house_x:
+                seed_all(seed)
+                house_x(motif, mean_embeds, model, trainer, sampler, seed, log_file_train, log_file_probs)
+
+            if explain_comp_4:
+                seed_all(seed)
+                comp_4(motif, mean_embeds, model, trainer, sampler, seed, log_file_train, log_file_probs)
+
+            if explain_comp_5:
+                seed_all(seed)
+                comp_5(motif, mean_embeds, model, trainer, sampler, seed, log_file_train, log_file_probs)
 
 
 

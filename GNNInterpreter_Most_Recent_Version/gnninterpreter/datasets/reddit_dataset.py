@@ -20,7 +20,8 @@ class Redditdataset(BaseGraphDataset):
 
     def __init__(self, *,
                  name='REDDIT-BINARY',
-                 url='https://ls11-www.cs.tu-dortmund.de/people/morris/graphkerneldatasets/REDDIT-BINARY.zip',
+                 #old url url='https://ls11-www.cs.tu-dortmund.de/people/morris/graphkerneldatasets/REDDIT-BINARY.zip',
+                 url='https://www.chrsmrrs.com/graphkerneldatasets/REDDIT-BINARY.zip',
                  **kwargs):
         self.url = url
         super().__init__(name=name, **kwargs)

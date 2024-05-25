@@ -59,7 +59,8 @@ class MUTAGDataset(BaseGraphDataset):
 
     def __init__(self, *,
                  name='MUTAG',
-                 url='https://ls11-www.cs.tu-dortmund.de/people/morris/graphkerneldatasets/MUTAG.zip',
+                 #old url url='https://ls11-www.cs.tu-dortmund.de/people/morris/graphkerneldatasets/MUTAG.zip',
+                 url="https://www.chrsmrrs.com/graphkerneldatasets/MUTAG.zip",
                  **kwargs):
         self.url = url
         super().__init__(name=name, **kwargs)
